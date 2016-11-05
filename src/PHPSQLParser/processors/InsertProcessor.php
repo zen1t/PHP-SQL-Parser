@@ -2,7 +2,7 @@
 /**
  * InsertProcessor.php
  *
- * This file implements the processor for the INSERT statements. 
+ * This file implements the processor for the INSERT statements.
  *
  * PHP version 5
  *
@@ -47,7 +47,7 @@ use PHPSQLParser\utils\ExpressionType;
  *
  * @author  André Rothe <andre.rothe@phosco.info>
  * @license http://www.debian.org/misc/bsd.license  BSD License (3 Clause)
- *  
+ *
  */
 class InsertProcessor extends AbstractProcessor {
 
@@ -85,6 +85,7 @@ class InsertProcessor extends AbstractProcessor {
                 continue;
 
             case 'INSERT':
+            case 'REPLACE':
                 continue;
 
             default:
@@ -112,12 +113,12 @@ class InsertProcessor extends AbstractProcessor {
         }
         $cols = $this->removeParenthesisFromStart($cols);
         if (stripos($cols, 'SELECT') === 0) {
-            $processor = new DefaultProcessor();
+            $processor = new DefaultProcessor($this->options);
             $parsed['sub_tree'] = array(
                     array('expr_type' => ExpressionType::QUERY, 'base_expr' => $cols,
                             'sub_tree' => $processor->process($cols)));
         } else {
-            $processor = new ColumnListProcessor();
+            $processor = new ColumnListProcessor($this->options);
             $parsed['sub_tree'] = $processor->process($cols);
             $parsed['expr_type'] = ExpressionType::COLUMN_LIST;
         }
@@ -127,6 +128,19 @@ class InsertProcessor extends AbstractProcessor {
     public function process($tokenList, $token_category = 'INSERT') {
         $table = '';
         $cols = false;
+        $comments = array();
+
+        foreach ($tokenList as $key => &$token) {
+            if ($key == 'VALUES') {
+                continue;
+            }
+            foreach ($token as &$value) {
+                if ($this->isCommentToken($value)) {
+                     $comments[] = parent::processComment($value);
+                     $value = '';
+                }
+            }
+        }
 
         $parsed = $this->processOptions($tokenList);
         unset($tokenList['OPTIONS']);
@@ -135,8 +149,8 @@ class InsertProcessor extends AbstractProcessor {
         $parsed = array_merge($parsed, $key);
         unset($tokenList['INTO']);
 
-        if ($table === '' && $token_category === 'INSERT') {
-            list($table, $cols, $key) = $this->processKeyword('INSERT', $tokenList);
+        if ($table === '' && in_array($token_category, array('INSERT', 'REPLACE'))) {
+            list($table, $cols, $key) = $this->processKeyword($token_category, $tokenList);
         }
 
         $parsed[] = array('expr_type' => ExpressionType::TABLE, 'table' => $table,
@@ -146,6 +160,8 @@ class InsertProcessor extends AbstractProcessor {
         if ($cols !== false) {
             $parsed[] = $cols;
         }
+
+        $parsed = array_merge($parsed, $comments);
 
         $tokenList[$token_category] = $parsed;
         return $tokenList;

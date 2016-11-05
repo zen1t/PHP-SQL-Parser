@@ -47,17 +47,17 @@ use PHPSQLParser\utils\ExpressionType;
  *
  * @author  André Rothe <andre.rothe@phosco.info>
  * @license http://www.debian.org/misc/bsd.license  BSD License (3 Clause)
- *  
+ *
  */
 class ValuesProcessor extends AbstractProcessor {
 
     protected function processExpressionList($unparsed) {
-        $processor = new ExpressionListProcessor();
+        $processor = new ExpressionListProcessor($this->options);
         return $processor->process($unparsed);
     }
 
     protected function processRecord($unparsed) {
-        $processor = new RecordProcessor();
+        $processor = new RecordProcessor($this->options);
         return $processor->process($unparsed);
     }
 
@@ -68,12 +68,17 @@ class ValuesProcessor extends AbstractProcessor {
         $base_expr = '';
 
         foreach ($tokens['VALUES'] as $k => $v) {
-            $base_expr .= $v;
-            $trim = trim($v);
-
             if ($this->isWhitespaceToken($v)) {
                 continue;
             }
+
+            if ($this->isCommentToken($v)) {
+                 $parsed[] = parent::processComment($v);
+                 continue;
+            }
+
+            $base_expr .= $v;
+            $trim = trim($v);
 
             $upper = strtoupper($trim);
             switch ($upper) {

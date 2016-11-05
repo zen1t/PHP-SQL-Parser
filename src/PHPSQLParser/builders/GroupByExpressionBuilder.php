@@ -1,8 +1,8 @@
 <?php
 /**
- * LimitProcessor.php
+ * GroupByExpressionBuilder.php
  *
- * This file implements the processor for the LIMIT statements.
+ * Builds an expression within a GROUP-BY clause.
  *
  * PHP version 5
  *
@@ -31,75 +31,59 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * @author    André Rothe <andre.rothe@phosco.info>
- * @copyright 2010-2014 Justin Swanhart and André Rothe
+ * 
+ * @author    oohook <oohook@163.com>
+ * @copyright 2010-2016 Justin Swanhart and André Rothe
  * @license   http://www.debian.org/misc/bsd.license  BSD License (3 Clause)
  * @version   SVN: $Id$
- *
+ * @example   group by id desc
+ * 
  */
 
-namespace PHPSQLParser\processors;
+namespace PHPSQLParser\builders;
+use PHPSQLParser\exceptions\UnableToCreateSQLException;
+use PHPSQLParser\utils\ExpressionType;
 
 /**
- * This class processes the LIMIT statements.
- * 
- * @author  André Rothe <andre.rothe@phosco.info>
+ * This class implements the builder for an alias within the GROUP-BY clause. 
+ * You can overwrite all functions to achieve another handling.
+ *
+ * @author  oohook <oohook@163.com>
  * @license http://www.debian.org/misc/bsd.license  BSD License (3 Clause)
- * 
+ *  
  */
-class LimitProcessor extends AbstractProcessor {
+class GroupByExpressionBuilder implements Builder {
 
-    public function process($tokens) {
-        $rowcount = "";
-        $offset = "";
-
-        $comma = -1;
-        $exchange = false;
-        
-        $comments = array();
-        
-        foreach ($tokens as &$token) {
-            if ($this->isCommentToken($token)) {
-                 $comments[] = parent::processComment($token);
-                 $token = '';
-            }
+	protected function buildColRef($parsed) {
+		$builder = new ColumnReferenceBuilder();
+		return $builder->build($parsed);
+	}
+	
+	protected function buildReserved($parsed) {
+		$builder = new ReservedBuilder();
+		return $builder->build($parsed);
+	}
+	
+    public function build(array $parsed) {
+        if ($parsed['expr_type'] !== ExpressionType::EXPRESSION) {
+            return "";
         }
         
-        for ($i = 0; $i < count($tokens); ++$i) {
-            $trim = strtoupper(trim($tokens[$i]));
-            if ($trim === ",") {
-                $comma = $i;
-                break;
+        $sql = "";
+        foreach ($parsed['sub_tree'] as $k => $v) {
+            $len = strlen($sql);
+            $sql .= $this->buildColRef($v);
+            $sql .= $this->buildReserved($v);
+
+            if ($len == strlen($sql)) {
+                throw new UnableToCreateSQLException('GROUP expression subtree', $k, $v, 'expr_type');
             }
-            if ($trim === "OFFSET") {
-                $comma = $i;
-                $exchange = true;
-                break;
-            }
+
+            $sql .= " ";
         }
 
-        for ($i = 0; $i < $comma; ++$i) {
-            if ($exchange) {
-                $rowcount .= $tokens[$i];
-            } else {
-                $offset .= $tokens[$i];
-            }
-        }
-
-        for ($i = $comma + 1; $i < count($tokens); ++$i) {
-            if ($exchange) {
-                $offset .= $tokens[$i];
-            } else {
-                $rowcount .= $tokens[$i];
-            }
-        }
-
-        $return = array('offset' => trim($offset), 'rowcount' => trim($rowcount));
-        if (count($comments)) {
-            $return['comments'] = $comments;
-        }
-        return $return;
+        $sql = substr($sql, 0, -1);
+        return $sql;
     }
 }
 ?>

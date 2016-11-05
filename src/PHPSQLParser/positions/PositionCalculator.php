@@ -133,6 +133,8 @@ class PositionCalculator {
         while (true) {
 
             $pos = strpos($sql, $value, $offset);
+            // error_log("pos:$pos value:$value sql:$sql");
+            
             if ($pos === false) {
                 break;
             }
@@ -154,7 +156,7 @@ class PositionCalculator {
             // whitespace, comma, parenthesis, digit or letter, end_of_string
             // an operator should not be surrounded by another operator
 
-            if ($expr_type === 'operator') {
+            if (in_array($expr_type,array('operator','column-list'),true)) {
 
                 $ok = ($before === "" || in_array($before, self::$allowedOnOperator, true))
                     || (strtolower($before) >= 'a' && strtolower($before) <= 'z');

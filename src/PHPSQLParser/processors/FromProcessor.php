@@ -55,20 +55,20 @@ use PHPSQLParser\utils\ExpressionType;
 class FromProcessor extends AbstractProcessor {
 
     protected function processExpressionList($unparsed) {
-        $processor = new ExpressionListProcessor();
+        $processor = new ExpressionListProcessor($this->options);
         return $processor->process($unparsed);
     }
-    
+
     protected function processColumnList($unparsed) {
-        $processor = new ColumnListProcessor();
+        $processor = new ColumnListProcessor($this->options);
         return $processor->process($unparsed);
     }
-    
+
     protected function processSQLDefault($unparsed) {
-        $processor = new DefaultProcessor();
+        $processor = new DefaultProcessor($this->options);
         return $processor->process($unparsed);
     }
-    
+
     protected function initParseInfo($parseInfo = false) {
         // first init
         if ($parseInfo === false) {
@@ -103,7 +103,7 @@ class FromProcessor extends AbstractProcessor {
             	$ref = $this->processColumnList($this->removeParenthesisFromStart($unparsed[0]));
             	$ref = array(array('expr_type' => ExpressionType::COLUMN_LIST, 'base_expr' => $unparsed[0], 'sub_tree' => $ref));
             } else {
-            	$ref = $this->processExpressionList($unparsed);
+                $ref = $this->processExpressionList($unparsed);
             }
             $parseInfo['ref_expr'] = (empty($ref) ? false : $ref);
         }
@@ -117,7 +117,18 @@ class FromProcessor extends AbstractProcessor {
                 $res['expr_type'] = ExpressionType::SUBQUERY;
             } else {
                 $tmp = $this->splitSQLIntoTokens($parseInfo['expression']);
-                $parseInfo['sub_tree'] = $this->process($tmp);
+                $unionProcessor = new UnionProcessor();
+                $unionQueries = $unionProcessor->process($tmp);
+
+                // If there was no UNION or UNION ALL in the query, then the query is
+                // stored at $queries[0].
+                if (!empty($unionQueries) && !UnionProcessor::isUnion($unionQueries)) {
+                    $sub_tree = $this->process($unionQueries[0]);
+                }
+                else {
+                    $sub_tree = $unionQueries;
+                }
+                $parseInfo['sub_tree'] = $sub_tree;
                 $res['expr_type'] = ExpressionType::TABLE_EXPRESSION;
             }
         } else {
@@ -158,6 +169,11 @@ class FromProcessor extends AbstractProcessor {
                 }
             }
 
+            if ($this->isCommentToken($token)) {
+                $expr[] = parent::processComment($token);
+                continue;
+            }
+
             switch ($upper) {
             case 'CROSS':
             case ',':
@@ -175,12 +191,12 @@ class FromProcessor extends AbstractProcessor {
 
             case 'LEFT':
             case 'RIGHT':
-            case 'NATURAL':            	
+            case 'NATURAL':
                 $token_category = $upper;
                 $prevToken = $token;
                 $i++;
                 continue 2;
-                
+
             default:
                 if ($token_category === 'LEFT' || $token_category === 'RIGHT') {
                     if ($upper === '') {
@@ -285,8 +301,8 @@ class FromProcessor extends AbstractProcessor {
                 break;
 
             default:
-            // TODO: enhance it, so we can have base_expr to calculate the position of the keywords
-            // build a subtree under "hints"
+                // TODO: enhance it, so we can have base_expr to calculate the position of the keywords
+                // build a subtree under "hints"
                 if ($token_category === 'IDX_HINT') {
                     $token_category = '';
                     $cur_hint = (count($parseInfo['hints']) - 1);

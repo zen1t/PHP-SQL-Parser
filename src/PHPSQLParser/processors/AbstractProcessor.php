@@ -42,16 +42,32 @@
 namespace PHPSQLParser\processors;
 
 use PHPSQLParser\lexer\PHPSQLLexer;
+use PHPSQLParser\Options;
 use PHPSQLParser\utils\ExpressionType;
 
 /**
  * This class contains some general functions for a processor.
- * 
+ *
  * @author  André Rothe <andre.rothe@phosco.info>
  * @license http://www.debian.org/misc/bsd.license  BSD License (3 Clause)
- * 
+ *
  */
 abstract class AbstractProcessor {
+
+    /**
+     * @var Options
+     */
+    protected $options;
+
+    /**
+     * AbstractProcessor constructor.
+     *
+     * @param Options $options
+     */
+    public function __construct(Options $options)
+    {
+        $this->options = $options;
+    }
 
     /**
      * This function implements the main functionality of a processor class.
@@ -78,9 +94,9 @@ abstract class AbstractProcessor {
      *   `a.b`
      *   a.`b`
      *   `a`.b
-     * It is also possible to have escaped quoting characters 
+     * It is also possible to have escaped quoting characters
      * within an expression part:
-     *   `a``b` => a`b 
+     *   `a``b` => a`b
      * And you can use whitespace between the parts:
      *   a  .  `b` => [a,b]
      */
@@ -166,6 +182,8 @@ abstract class AbstractProcessor {
         $parenthesis = $parenthesisRemoved;
         $i = 0;
         $string = 0;
+        // Whether a string was opened or not, and with which character it was open (' or ")
+        $stringOpened = '';
         while ($i < strlen($trim)) {
 
             if ($trim[$i] === "\\") {
@@ -173,15 +191,27 @@ abstract class AbstractProcessor {
                 continue;
             }
 
-            if ($trim[$i] === "'" || $trim[$i] === '"') {
-                $string++;
+            if ($trim[$i] === "'") {
+                if ($stringOpened === '') {
+                    $stringOpened = "'";
+                } elseif ($stringOpened === "'") {
+                    $stringOpened = '';
+                }
             }
 
-            if (($string % 2 === 0) && ($trim[$i] === '(')) {
+            if ($trim[$i] === '"') {
+                if ($stringOpened === '') {
+                    $stringOpened = '"';
+                } elseif ($stringOpened === '"') {
+                    $stringOpened = '';
+                }
+            }
+
+            if (($stringOpened === '') && ($trim[$i] === '(')) {
                 $parenthesis++;
             }
 
-            if (($string % 2 === 0) && ($trim[$i] === ')')) {
+            if (($stringOpened === '') && ($trim[$i] === ')')) {
                 if ($parenthesis == $parenthesisRemoved) {
                     $trim[$i] = ' ';
                     $parenthesisRemoved--;
@@ -265,13 +295,28 @@ abstract class AbstractProcessor {
         return (isset($out['expr_type']) && $out['expr_type'] === ExpressionType::SUBQUERY);
     }
 
+    protected function isComment($out) {
+        return (isset($out['expr_type']) && $out['expr_type'] === ExpressionType::COMMENT);
+    }
+
+    public function processComment($expression) {
+        $result = array();
+        $result['expr_type'] = ExpressionType::COMMENT;
+        $result['value'] = $expression;
+        return $result;
+    }
+
     /**
      * translates an array of objects into an associative array
      */
     public function toArray($tokenList) {
         $expr = array();
         foreach ($tokenList as $token) {
-            $expr[] = $token->toArray();
+            if ($token instanceof \PHPSQLParser\utils\ExpressionToken) {
+                $expr[] = $token->toArray();
+            } else {
+                $expr[] = $token;
+            }
         }
         return $expr;
     }

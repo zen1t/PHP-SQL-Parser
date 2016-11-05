@@ -43,7 +43,7 @@ use PHPSQLParser\utils\ExpressionType;
 class ColumnDefinitionProcessor extends AbstractProcessor {
 
     protected function processExpressionList($parsed) {
-        $processor = new ExpressionListProcessor();
+        $processor = new ExpressionListProcessor($this->options);
         $expr = $this->removeParenthesisFromStart($parsed);
         $expr = $this->splitSQLIntoTokens($expr);
         $expr = $this->removeComma($expr);
@@ -51,7 +51,7 @@ class ColumnDefinitionProcessor extends AbstractProcessor {
     }
 
     protected function processReferenceDefinition($parsed) {
-        $processor = new ReferenceDefinitionProcessor();
+        $processor = new ReferenceDefinitionProcessor($this->options);
         return $processor->process($parsed);
     }
 
@@ -148,6 +148,7 @@ class ColumnDefinitionProcessor extends AbstractProcessor {
 
             case 'BIT':
             case 'TINYBIT':
+            case 'TINYINT':
             case 'SMALLINT':
             case 'MEDIUMINT':
             case 'INT':
@@ -195,11 +196,16 @@ class ColumnDefinitionProcessor extends AbstractProcessor {
                 $prevCategory = $upper;
                 continue 2;
 
+            case 'YEAR':
+                $expr[] = array('expr_type' => ExpressionType::DATA_TYPE, 'base_expr' => $trim, 'length' => false);
+                $currCategory = 'SINGLE_PARAM_PARENTHESIS';
+                $prevCategory = $upper;
+                continue 2;
+
             case 'DATE':
             case 'TIME':
             case 'TIMESTAMP':
             case 'DATETIME':
-            case 'YEAR':
             case 'TINYBLOB':
             case 'BLOB':
             case 'MEDIUMBLOB':
@@ -218,7 +224,6 @@ class ColumnDefinitionProcessor extends AbstractProcessor {
                 continue 2;
 
             case 'ENUM':
-            case 'SET':
                 $currCategory = 'MULTIPLE_PARAM_PARENTHESIS';
                 $prevCategory = 'TEXT';
                 $expr[] = array('expr_type' => ExpressionType::RESERVED, 'base_expr' => $trim, 'sub_tree' => false);
@@ -239,40 +244,24 @@ class ColumnDefinitionProcessor extends AbstractProcessor {
                 continue 2;
 
             case 'CHARACTER':
-                if ($prevCategory === 'TEXT') {
-                    $parsed = array('expr_type' => ExpressionType::DATA_TYPE, 'base_expr' => $trim);
-                    $expr[] = array('expr_type' => ExpressionType::CHARSET, 'base_expr' => substr($base_expr, 0, -1),
-                                    'sub_tree' => $parsed);
-                    $base_expr = $token;
-                    $currCategory = 'CHARSET';
-                    continue 2;
-                }
-                // else ?
-                break;
+                $currCategory = 'CHARSET';
+                $options['sub_tree'][] = array('expr_type' => ExpressionType::RESERVED, 'base_expr' => $trim);
+                continue 2;
 
             case 'SET':
-                if ($currCategory === 'CHARSET') {
-                    // TODO: is it necessary to set special properties like the name or collation?
-                    $parsed = array('expr_type' => ExpressionType::RESERVED, 'base_expr' => $trim);
-                    $last = array_pop($expr);
-                    $last['sub_tree'][] = $parsed;
-                    $expr[] = $last;
-                    continue 2;
-                }
-                // else ?
-                break;
+				if ($currCategory == 'CHARSET') {
+    	            $options['sub_tree'][] = array('expr_type' => ExpressionType::RESERVED, 'base_expr' => $trim);
+				} else {
+	                $currCategory = 'MULTIPLE_PARAM_PARENTHESIS';
+    	            $prevCategory = 'TEXT';
+        	        $expr[] = array('expr_type' => ExpressionType::RESERVED, 'base_expr' => $trim, 'sub_tree' => false);
+				}
+                continue 2;
 
             case 'COLLATE':
-                if ($prevCategory === 'TEXT') {
-                    $parsed = array('expr_type' => ExpressionType::RESERVED, 'base_expr' => $trim);
-                    $expr[] = array('expr_type' => ExpressionType::COLLATE, 'base_expr' => substr($base_expr, 0, -1),
-                                    'sub_tree' => $parsed);
-                    $base_expr = $token;
-                    $currCategory = 'COLLATION';
-                    continue 2;
-                }
-                // else ?
-                break;
+                $currCategory = $upper;
+                $options['sub_tree'][] = array('expr_type' => ExpressionType::RESERVED, 'base_expr' => $trim);
+                continue 2;
 
             case 'NOT':
             case 'NULL':
@@ -362,25 +351,17 @@ class ColumnDefinitionProcessor extends AbstractProcessor {
 
                 case 'COLLATE':
                 // this is the collation name
-                    $parsed = array('expr_type' => ExpressionType::CONSTANT, 'base_expr' => $trim);
-                    $last = array_pop($expr);
-                    $last['sub_tree'][] = $parsed;
-                    $t = $base_expr;
-                    $base_expr = $last['base_expr'] . $base_expr;
-                    $last['base_expr'] = $t;
+                    $options['sub_tree'][] = array('expr_type' => ExpressionType::COLLATE, 'base_expr' => $trim);
+                    $options['collate'] = $trim;
                     $currCategory = $prevCategory;
                     break;
 
                 case 'CHARSET':
                 // this is the character set name
-                    $parsed = array('expr_type' => ExpressionType::CONSTANT, 'base_expr' => $trim);
-                    $last = array_pop($expr);
-                    $last['sub_tree'][] = $parsed;
-                    $t = $base_expr;
-                    $base_expr = $last['base_expr'] . $base_expr;
-                    $last['base_expr'] = $t;
+                    $options['sub_tree'][] = array('expr_type' => ExpressionType::CHARSET, 'base_expr' => $trim);
+                    $options['charset'] = $trim;
                     $currCategory = $prevCategory;
-                    break;
+                  break;
 
                 case 'SINGLE_PARAM_PARENTHESIS':
                     $parsed = $this->removeParenthesisFromStart($trim);
@@ -413,8 +394,14 @@ class ColumnDefinitionProcessor extends AbstractProcessor {
                     $parsed = $this->processExpressionList($trim);
 
                     $last = array_pop($expr);
-                    $last['sub_tree'] = array('expr_type' => ExpressionType::BRACKET_EXPRESSION, 'base_expr' => $trim,
-                                              'sub_tree' => $parsed);
+                    $subTree = array('expr_type' => ExpressionType::BRACKET_EXPRESSION, 'base_expr' => $trim,
+                                     'sub_tree' => $parsed);
+
+                    if ($this->options->getConsistentSubtrees()) {
+                        $subTree = array($subTree);
+                    }
+
+                    $last['sub_tree'] = $subTree;
                     $expr[] = $last;
                     $currCategory = $prevCategory;
                     break;

@@ -1,8 +1,8 @@
 <?php
 /**
- * LimitProcessor.php
+ * mixedQuotesTest.php
  *
- * This file implements the processor for the LIMIT statements.
+ * Test case for PHPSQLParser.
  *
  * PHP version 5
  *
@@ -38,68 +38,18 @@
  * @version   SVN: $Id$
  *
  */
+namespace PHPSQLParser\Test\Parser;
+use PHPSQLParser\PHPSQLParser;
+use PHPSQLParser\PHPSQLCreator;
 
-namespace PHPSQLParser\processors;
+class mixedQuotesTest extends \PHPUnit_Framework_TestCase {
 
-/**
- * This class processes the LIMIT statements.
- * 
- * @author  André Rothe <andre.rothe@phosco.info>
- * @license http://www.debian.org/misc/bsd.license  BSD License (3 Clause)
- * 
- */
-class LimitProcessor extends AbstractProcessor {
+    public function testMixedQuotes() {
+        $parser = new PHPSQLParser();
 
-    public function process($tokens) {
-        $rowcount = "";
-        $offset = "";
+        $sql = 'SELECT ISNULL(\'"\') AS foo FROM bar;';
+        $parser->parse($sql);
 
-        $comma = -1;
-        $exchange = false;
-        
-        $comments = array();
-        
-        foreach ($tokens as &$token) {
-            if ($this->isCommentToken($token)) {
-                 $comments[] = parent::processComment($token);
-                 $token = '';
-            }
-        }
-        
-        for ($i = 0; $i < count($tokens); ++$i) {
-            $trim = strtoupper(trim($tokens[$i]));
-            if ($trim === ",") {
-                $comma = $i;
-                break;
-            }
-            if ($trim === "OFFSET") {
-                $comma = $i;
-                $exchange = true;
-                break;
-            }
-        }
-
-        for ($i = 0; $i < $comma; ++$i) {
-            if ($exchange) {
-                $rowcount .= $tokens[$i];
-            } else {
-                $offset .= $tokens[$i];
-            }
-        }
-
-        for ($i = $comma + 1; $i < count($tokens); ++$i) {
-            if ($exchange) {
-                $offset .= $tokens[$i];
-            } else {
-                $rowcount .= $tokens[$i];
-            }
-        }
-
-        $return = array('offset' => trim($offset), 'rowcount' => trim($rowcount));
-        if (count($comments)) {
-            $return['comments'] = $comments;
-        }
-        return $return;
+        $this->assertEquals('\'"\'', $parser->parsed['SELECT'][0]['sub_tree'][0]['base_expr'], "Mixed quotes test failed");
     }
 }
-?>

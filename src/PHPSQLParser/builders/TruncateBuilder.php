@@ -1,8 +1,8 @@
 <?php
 /**
- * LimitProcessor.php
+ * TruncateBuilder.php
  *
- * This file implements the processor for the LIMIT statements.
+ * Builds the TRUNCATE statement
  *
  * PHP version 5
  *
@@ -31,75 +31,41 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
+ * 
  * @author    André Rothe <andre.rothe@phosco.info>
  * @copyright 2010-2014 Justin Swanhart and André Rothe
  * @license   http://www.debian.org/misc/bsd.license  BSD License (3 Clause)
  * @version   SVN: $Id$
- *
+ * 
  */
 
-namespace PHPSQLParser\processors;
+namespace PHPSQLParser\builders;
 
 /**
- * This class processes the LIMIT statements.
- * 
+ * This class implements the builder for the [TRUNCATE] part. You can overwrite
+ * all functions to achieve another handling.
+ *
  * @author  André Rothe <andre.rothe@phosco.info>
  * @license http://www.debian.org/misc/bsd.license  BSD License (3 Clause)
- * 
+ *  
  */
-class LimitProcessor extends AbstractProcessor {
+class TruncateBuilder implements Builder {
 
-    public function process($tokens) {
-        $rowcount = "";
-        $offset = "";
+    public function build(array $parsed) {
+        $sql = "TRUNCATE TABLE ";
+        $right = -1;
 
-        $comma = -1;
-        $exchange = false;
-        
-        $comments = array();
-        
-        foreach ($tokens as &$token) {
-            if ($this->isCommentToken($token)) {
-                 $comments[] = parent::processComment($token);
-                 $token = '';
-            }
-        }
-        
-        for ($i = 0; $i < count($tokens); ++$i) {
-            $trim = strtoupper(trim($tokens[$i]));
-            if ($trim === ",") {
-                $comma = $i;
-                break;
-            }
-            if ($trim === "OFFSET") {
-                $comma = $i;
-                $exchange = true;
-                break;
+        // works for one table only
+        $parsed['tables'] = array($parsed['TABLE']['base_expr']);
+
+        if ($parsed['tables'] !== false) {
+            foreach ($parsed['tables'] as $k => $v) {
+                $sql .= $v . ", ";
+                $right = -2;
             }
         }
 
-        for ($i = 0; $i < $comma; ++$i) {
-            if ($exchange) {
-                $rowcount .= $tokens[$i];
-            } else {
-                $offset .= $tokens[$i];
-            }
-        }
-
-        for ($i = $comma + 1; $i < count($tokens); ++$i) {
-            if ($exchange) {
-                $offset .= $tokens[$i];
-            } else {
-                $rowcount .= $tokens[$i];
-            }
-        }
-
-        $return = array('offset' => trim($offset), 'rowcount' => trim($rowcount));
-        if (count($comments)) {
-            $return['comments'] = $comments;
-        }
-        return $return;
+        return substr($sql, 0, $right);
     }
 }
 ?>

@@ -1,3 +1,5 @@
 vendor/
 composer.lock
 clover.xml
+composer.phar
+.idea

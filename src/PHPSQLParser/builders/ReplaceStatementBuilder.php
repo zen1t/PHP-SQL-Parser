@@ -1,8 +1,8 @@
 <?php
 /**
- * LimitProcessor.php
+ * ReplaceStatement.php
  *
- * This file implements the processor for the LIMIT statements.
+ * Builds the REPLACE statement
  *
  * PHP version 5
  *
@@ -31,75 +31,59 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
+ * 
  * @author    André Rothe <andre.rothe@phosco.info>
  * @copyright 2010-2014 Justin Swanhart and André Rothe
  * @license   http://www.debian.org/misc/bsd.license  BSD License (3 Clause)
  * @version   SVN: $Id$
- *
+ * 
  */
 
-namespace PHPSQLParser\processors;
+namespace PHPSQLParser\builders;
 
 /**
- * This class processes the LIMIT statements.
- * 
+ * This class implements the builder for the whole Replace statement. You can overwrite
+ * all functions to achieve another handling.
+ *
  * @author  André Rothe <andre.rothe@phosco.info>
  * @license http://www.debian.org/misc/bsd.license  BSD License (3 Clause)
- * 
+ *  
  */
-class LimitProcessor extends AbstractProcessor {
+class ReplaceStatementBuilder implements Builder {
 
-    public function process($tokens) {
-        $rowcount = "";
-        $offset = "";
+    protected function buildVALUES($parsed) {
+        $builder = new ValuesBuilder();
+        return $builder->build($parsed);
+    }
 
-        $comma = -1;
-        $exchange = false;
-        
-        $comments = array();
-        
-        foreach ($tokens as &$token) {
-            if ($this->isCommentToken($token)) {
-                 $comments[] = parent::processComment($token);
-                 $token = '';
-            }
-        }
-        
-        for ($i = 0; $i < count($tokens); ++$i) {
-            $trim = strtoupper(trim($tokens[$i]));
-            if ($trim === ",") {
-                $comma = $i;
-                break;
-            }
-            if ($trim === "OFFSET") {
-                $comma = $i;
-                $exchange = true;
-                break;
-            }
-        }
+    protected function buildREPLACE($parsed) {
+        $builder = new ReplaceBuilder();
+        return $builder->build($parsed);
+    }
 
-        for ($i = 0; $i < $comma; ++$i) {
-            if ($exchange) {
-                $rowcount .= $tokens[$i];
-            } else {
-                $offset .= $tokens[$i];
-            }
+    protected function buildSELECT($parsed) {
+        $builder = new SelectStatementBuilder();
+        return $builder->build($parsed);
+    }
+    
+    protected function buildSET($parsed) {
+        $builder = new SetBuilder();
+        return $builder->build($parsed);
+    }
+    
+    public function build(array $parsed) {
+        // TODO: are there more than one tables possible (like [REPLACE][1])
+        $sql = $this->buildREPLACE($parsed['REPLACE']);
+        if (isset($parsed['VALUES'])) {
+            $sql .= ' ' . $this->buildVALUES($parsed['VALUES']);
         }
-
-        for ($i = $comma + 1; $i < count($tokens); ++$i) {
-            if ($exchange) {
-                $offset .= $tokens[$i];
-            } else {
-                $rowcount .= $tokens[$i];
-            }
+        if (isset($parsed['SET'])) {
+            $sql .= ' ' . $this->buildSET($parsed['SET']);
         }
-
-        $return = array('offset' => trim($offset), 'rowcount' => trim($rowcount));
-        if (count($comments)) {
-            $return['comments'] = $comments;
+        if (isset($parsed['SELECT'])) {
+            $sql .= ' ' . $this->buildSELECT($parsed);
         }
-        return $return;
+        return $sql;
     }
 }
 ?>
