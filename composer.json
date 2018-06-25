@@ -1,5 +1,5 @@
 {
-	"name" : "greenlion/php-sql-parser",
+	"name" : "zent/php-sql-parser",
 	"type" : "library",
 	"description" : "A pure PHP SQL (non validating) parser w/ focus on MySQL dialect of SQL",
 	"keywords" : [
