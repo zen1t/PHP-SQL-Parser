@@ -97,7 +97,7 @@ class UnionProcessor extends AbstractProcessor {
 
                     // starts with "(select"
                     if (preg_match("/^\\(\\s*select\\s*/i", $token)) {
-                        $queries[$unionType][$key] = $this->processDefault($this->removeParenthesisFromStart($token));
+                        $queries[$unionType][$key] = $this->processDefault();
                         break;
                     }
                     $queries[$unionType][$key] = $this->processSQL($queries[$unionType][$key]);
