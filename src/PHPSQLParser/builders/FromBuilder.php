@@ -84,8 +84,7 @@ class FromBuilder implements Builder {
                     $select_builder = new SelectStatementBuilder();
 
                     $len = strlen($sql);
-                    $sql .= $select_builder->build($item);
-
+                    $sql .= '('.$select_builder->build($item).')';
                     if ($len === strlen($sql)) {
                         throw new UnableToCreateSQLException('FROM', $union_type, $outer_v, 'expr_type');
                     }
