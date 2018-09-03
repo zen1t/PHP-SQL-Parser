@@ -108,6 +108,9 @@ class LexerSplitter {
 			    case "/":
 				    $part = "\/";
 				    break;
+				case '"':
+				    $part = '\\\"';
+				    break;
 			    case "/\*":
 				    $part = "\/\*";
 				    break;
